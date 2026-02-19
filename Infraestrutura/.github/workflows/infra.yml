@@ -1,0 +1,67 @@
+name: Terraform CI/CD
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Executar o Terraform apply?'
+        required: true
+        default: 'False'
+        type: choice
+        options:
+          - 'True'
+          - 'False'
+
+      destroy:
+        description: 'Executar o Terraform Destroy?'
+        required: true
+        default: 'False'
+        type: choice
+        options:
+          - 'True'
+          - 'False'
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  job1:
+    name: Infraestrutura CI/CD
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: "Configure AWS Credentials" 
+        uses: aws-actions/configure-aws-credentials@v6.0.0
+        with:
+          role-to-assume: <ARN da role>
+          aws-region: us-east-2
+
+      - name: HashiCorp - Setup Terraform
+        uses: hashicorp/setup-terraform@v3.1.2
+
+      - name: Terraform Init
+        run: terraform init 
+        working-directory: Terraform
+
+      - name: Terraform Validate
+        run: terraform validate
+        working-directory: Terraform
+
+      - name: Terraform Plan
+        run: terraform plan -out=tfplan.tfout 
+        working-directory: Terraform
+
+      - name: Terraform Apply
+        run: terraform apply -auto-approve tfplan.tfout
+        if: github.event.inputs.apply == 'True' && github.event.inputs.destroy != 'True'
+        working-directory: Terraform
+
+      - name: Terraform Destroy
+        run: terraform destroy -auto-approve
+        if: github.event.inputs.apply == 'False' && github.event.inputs.destroy == 'True'
+        working-directory: Terraform
+
+        

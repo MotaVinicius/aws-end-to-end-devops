@@ -1,0 +1,51 @@
+name: Deploy CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  job1:
+    name: Build ECR
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: "Configure AWS Credentials" 
+        uses: aws-actions/configure-aws-credentials@v6.0.0
+        with:
+          role-to-assume: <ARN da Role>
+          aws-region: us-east-2
+
+      - name: Amazon ECR "Login" Action for GitHub Actions
+        uses: aws-actions/amazon-ecr-login@v2.0.1
+
+      - name: Build Image ans Push
+        run: |
+          docker build -t app-web:${{ github.sha }} .
+    
+          docker tag app-web:${{ github.sha }} <Image URI>:${{ github.sha }}
+          docker tag app-web:${{ github.sha }} <Image URI>:latest
+    
+          docker push <Image URI>:${{ github.sha }}
+          docker push <Image URI>:latest
+
+      - name: Restart container via SSM
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --targets "Key=tag:Name,Values=app-1" \
+            --parameters 'commands=[
+              "aws ecr get-login-password --region us-east-2 | docker login --username AWS --password-stdin <Registry URI>",
+              "docker pull <Image URI>",
+              "docker rm -f app || true",
+              "docker run -d --name app -p 80:80 --restart always <image URI>"
+            ]' \
+            --region us-east-2
